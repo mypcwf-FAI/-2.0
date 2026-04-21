@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球月供模擬系統 | 輝仔戰略指揮官</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { 
+            --primary: #007bff; --qi-red: #e74c3c; --zheng-green: #2ecc71; 
+            --dark-bg: #121212; --card-shadow: 0 8px 30px rgba(0,0,0,0.12); 
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'PingFang HK', 'Microsoft JhengHei', sans-serif; margin: 0; background: #f0f2f5; color: #333; overflow-x: hidden; }
+        
+        /* 頁首英雄區 */
+        .hero { 
+            position: relative; height: 320px; 
+            background: #2c3e50 url('image.jpg') center/cover no-repeat; 
+            display: flex; align-items: center; justify-content: center; color: white;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.5);
+        }
+        .hero-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); }
+        .hero-content { z-index: 10; text-align: center; padding: 0 20px; }
+        .hero-content h1 { font-size: 32px; margin: 0; letter-spacing: 1px; }
+        .quote { font-style: italic; margin-top: 10px; font-size: 1.1rem; opacity: 0.9; }
+
+        /* 主容器佈局 */
+        .container { max-width: 1200px; margin: -40px auto 60px; display: grid; grid-template-columns: 1fr 2.2fr; gap: 20px; padding: 0 20px; }
+        
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: var(--card-shadow); height: fit-content; }
+
+        /* AI 掃描區 - 解決溢出問題 */
+        .ai-scanner { 
+            background: var(--dark-bg); color: #00ff00; padding: 15px; border-radius: 10px; 
+            font-family: 'Courier New', monospace; font-size: 12px; margin-bottom: 20px; 
+            border-left: 4px solid #00ff00; line-height: 1.5; overflow: hidden;
+        }
+        .scan-line { border-bottom: 1px solid #222; padding: 4px 0; white-space: normal; word-break: break-all; }
+
+        /* 表單樣式 */
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 14px; color: #555; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; background: #fff; }
+        .btn-trigger { 
+            width: 100%; padding: 16px; background: var(--primary); color: white; border: none; 
+            border-radius: 10px; font-size: 18px; font-weight: 800; cursor: pointer; transition: 0.3s;
+        }
+        .btn-trigger:hover { background: #0056b3; transform: scale(1.02); }
+
+        /* 結果展示區 */
+        #result-area { display: none; animation: fadeIn 0.6s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .env-header { background: #fff8e1; border-left: 6px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        
+        /* 解決排版阻礙：左右佈局優化 */
+        .result-main { display: flex; flex-wrap: wrap; gap: 25px; align-items: flex-start; }
+        .chart-box { flex: 1; min-width: 280px; max-width: 400px; padding: 10px; }
+        .table-box { flex: 2; min-width: 320px; }
+
+        .army-table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; }
+        .army-table th { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #eee; }
+        .army-table td { padding: 12px; border-bottom: 1px solid #f0f0f0; }
+
+        .tag { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; margin-right: 5px; }
+        .tag-qi { background: var(--qi-red); }
+        .tag-zheng { background: var(--zheng-green); }
+
+        footer { text-align: center; padding: 40px; color: #888; font-size: 13px; }
+
+        @media (max-width: 1000px) {
+            .container { grid-template-columns: 1fr; }
+            .hero { height: 260px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="hero">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+        <h1>全球月供投資模擬系統</h1>
+        <div class="quote">「人生就像滾雪球，你只要找到濕的雪，和很長的坡道。」</div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="card">
+        <div class="ai-scanner" id="scanner">
+            <div class="scan-line">[指令] 已載入：正兵四部、奇兵四部</div>
+            <div class="scan-line">[認證] 王牌課程核心邏輯驗證通過</div>
+            <div id="dynamic-status" class="scan-line">待命：請輸入參數並啟動變陣</div>
+        </div>
+
+        <div class="form-group">
+            <label>你的年齡 (影響防禦厚度)</label>
+            <input type="number" id="age" value="42">
+        </div>
+        <div class="form-group">
+            <label>每月模擬定投 (HKD)</label>
+            <input type="number" id="budget" value="10000">
+        </div>
+        <div class="form-group">
+            <label>核心目標 (決定用兵風格)</label>
+            <select id="goal">
+                <option value="aggressive">資產爆發 (重用連弩/精銳)</option>
+                <option value="balanced">穩健增長 (長槍/鐵盾平衡)</option>
+                <option value="income">高現金流 (重甲/糧草為主)</option>
+            </select>
+        </div>
+        <button class="btn-trigger" onclick="runCommand()">啟動 AI 自動判市變陣</button>
+    </div>
+
+    <div class="card" id="result-area">
+        <div class="env-header">
+            <h3 id="env-title" style="margin:0; color:#b8860b;">偵測中...</h3>
+            <p id="env-desc" style="margin:8px 0 0; font-size:14px; color:#5d4037;"></p>
+        </div>
+
+        <div class="result-main">
+            <div class="chart-box">
+                <canvas id="battleChart"></canvas>
+            </div>
+            <div class="table-box">
+                <table class="army-table">
+                    <thead>
+                        <tr>
+                            <th>軍團兵種</th>
+                            <th>推薦標的</th>
+                            <th>配置%</th>
+                            <th>月投金額</th>
+                        </tr>
+                    </thead>
+                    <tbody id="army-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div style="margin-top:25px; padding:15px; background:#f1f8e9; border-radius:10px; border:1px solid #dcedc8;">
+            <h4 style="margin:0 0 8px 0; color:#33691e;">📜 戰略鐵則回傳</h4>
+            <p id="strategy-rule" style="margin:0; font-size:13px; color:#555; line-height:1.6;"></p>
+        </div>
+    </div>
+</div>
+
+<footer>
+    輝仔 2026 | 投資涉及風險，配兵僅供參考
+</footer>
+
+<script>
+let chartObj = null;
+
+// 軍火庫數據定義
+const armory = {
+    qi: {
+        aggressive: [ {n:'連弩兵', s:'QQQ/GRID', d:'AI與科技爆發力'}, {n:'精銳步卒', s:'MSFT/NVDA', d:'行業壟斷龍頭'} ],
+        balanced: [ {n:'遊騎兵', s:'CWB/HYG', d:'進可攻退可守'}, {n:'精銳步卒', s:'AAPL/ASML', d:'穩健成長核心'} ],
+        income: [ {n:'遊騎兵', s:'HYG', d:'高息債基增強'} ]
+    },
+    zheng: {
+        aggressive: [ {n:'重戟兵', s:'SCHD', d:'高股息價值底倉'} ],
+        balanced: [ {n:'長槍兵', s:'XOM/CVX', d:'抗通脹能源'}, {n:'鐵盾兵', s:'AGG/BND', d:'無風險壓倉'} ],
+        income: [ {n:'重甲騎', s:'O/PSA', d:'月月收租'}, {n:'糧草營', s:'POWR/XLU', d:'基建剛需現金流'} ]
+    }
+};
+
+function runCommand() {
+    const age = parseInt(document.getElementById('age').value);
+    const budget = parseInt(document.getElementById('budget').value);
+    const goal = document.getElementById('goal').value;
+
+    // 1. 自動判市 (模擬牛熊布局：目前判定為 牛市2: 主升擴張階段)
+    const market = {
+        name: "🐮 牛市 2：主升擴張階段",
+        rule: "正奇平衡、穩中求勝。正奇各 5 成，靠正兵股息滾倉，奇兵把握波段機會。",
+        baseQi: 50,
+        baseZheng: 50
+    };
+
+    // 2. 目標與年齡加權修正
+    let finalZheng = market.baseZheng;
+    if (goal === 'income') finalZheng += 15;
+    if (goal === 'aggressive') finalZheng -= 10;
+    
+    // 年齡補償：每過40歲，正兵防禦+1%
+    const ageFactor = Math.max(0, (age - 40) * 1);
+    finalZheng = Math.min(95, finalZheng + ageFactor);
+    let finalQi = 100 - finalZheng;
+
+    // 3. 兵種選擇連動
+    let selectedTroops = [];
+    const qiSelection = armory.qi[goal];
+    const zhengSelection = armory.zheng[goal];
+
+    // 分配奇兵子項
+    qiSelection.forEach(t => {
+        selectedTroops.push({ ...t, type: 'qi', p: (finalQi / qiSelection.length).toFixed(1), c: '#e74c3c' });
+    });
+    // 分配正兵子項
+    zhengSelection.forEach(t => {
+        selectedTroops.push({ ...t, type: 'zheng', p: (finalZheng / zhengSelection.length).toFixed(1), c: '#2ecc71' });
+    });
+
+    // 4. 更新 UI
+    document.getElementById('result-area').style.display = 'block';
+    document.getElementById('env-title').innerText = market.name;
+    document.getElementById('env-desc').innerText = `目前戰略：${market.rule}`;
+    document.getElementById('strategy-rule').innerText = `指揮官建議：針對您 ${age} 歲的資產屬性，已將正兵比例優化至 ${finalZheng}%，確保雪球坡道穩固。`;
+    document.getElementById('dynamic-status').innerText = `[成功] 已根據「${document.getElementById('goal').selectedOptions[0].text}」目標重新排兵。`;
+
+    let html = "";
+    selectedTroops.forEach(t => {
+        const amt = Math.round(budget * t.p / 100);
+        html += `<tr>
+            <td><span class="tag ${t.type==='qi'?'tag-qi':'tag-zheng'}">${t.type==='qi'?'奇':'正'}</span>${t.n}</td>
+            <td><small>${t.s}</small></td>
+            <td>${t.p}%</td>
+            <td><b>$${amt}</b></td>
+        </tr>`;
+    });
+    document.getElementById('army-tbody').innerHTML = html;
+
+    // 5. 更新圖表
+    const ctx = document.getElementById('battleChart').getContext('2d');
+    if (chartObj) chartObj.destroy();
+    chartObj = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: selectedTroops.map(t => t.n),
+            datasets: [{ data: selectedTroops.map(t => t.p), backgroundColor: selectedTroops.map(t => t.c), borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: { cutout: '65%', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: true }
+    });
+
+    window.scrollTo({ top: document.getElementById('result-area').offsetTop - 20, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
